@@ -2,5 +2,7 @@
     "cSpell.words": [
         "hyperparameters",
         "mlxtend"
-    ]
+    ],
+    "editor.tabCompletion": "on",
+    "editor.defaultFormatter": "ms-python.autopep8"
 }

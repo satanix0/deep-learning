@@ -2,3 +2,5 @@
 logs
 api_config.json
 /test.ipynb
+DL04_CNN/data/train/
+DL04_CNN/data/test/

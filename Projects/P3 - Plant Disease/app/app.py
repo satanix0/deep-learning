@@ -1,64 +1,74 @@
-import os
+"""Streamlit app for classifying plant disease images with a saved model."""
+
 import json
+import os
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
 from keras_preprocessing import image
-
 import numpy as np
-import tensorflow as tf
 import streamlit as st
+import tensorflow as tf
 
-working_dir = os.getcwd()
-model_path = os.path.join(working_dir, 'model', 'plant_disease_model.h5')
-model = tf.keras.models.load_model(model_path)
+APP_DIR = Path(__file__).resolve().parent
+MODEL_PATH = APP_DIR / "model" / "plant_disease_model.h5"
+CLASS_INDEX_PATH = APP_DIR / "class_indices.json"
 
-class_indices = json.load(
-    open(os.path.join(working_dir, 'class_indices.json'), 'r'))
+model = tf.keras.models.load_model(MODEL_PATH)
+
+with CLASS_INDEX_PATH.open(encoding="utf-8") as class_file:
+    class_indices = json.load(class_file)
 
 
 def load_and_preprocess(image_path, target_size=(256, 256)):
+    """Load an image file and scale pixels into the model input range."""
     img = image.load_img(image_path, target_size=target_size)
     img = image.img_to_array(img)
-    img = np.expand_dims(img, axis=0)  # Add batch dimension
-    img = img / 255.0  # Normalize to [0, 1]
+    img = np.expand_dims(img, axis=0)
+    img = img / 255.0
     return img
 
 
 def predict_image(model, image_path, class_indices):
+    """Predict the class label for a preprocessed plant image."""
     preprocessed_image = load_and_preprocess(image_path)
     predictions = model.predict(preprocessed_image)
-    predict_class_idx = np.argmax(predictions, axis=1)[0]
-    predict_class = class_indices[str(predict_class_idx)]
-    return predict_class
+    predicted_class_idx = np.argmax(predictions, axis=1)[0]
+    return class_indices[str(predicted_class_idx)]
 
 
 def main():
+    """Render the upload form and prediction result."""
     st.title("Plant Disease Prediction")
 
     uploaded_img = st.file_uploader(
-        "Upload an image...", type=["jpg", "jpeg", "png"])
+        "Upload an image...", type=["jpg", "jpeg", "png"]
+    )
 
-    if uploaded_img is not None:
-        col1, col2 = st.columns(2)  # Create two columns
-
-        with col1:
-            resized_img = image.load_img(uploaded_img, target_size=(256, 256))
-            st.image(resized_img, caption="Uploaded Image",
-                     use_column_width=True)
-
-        with col2:
-            if st.button(label="classify"):
-                with st.spinner("Predicting..."):
-                    img_path = os.path.join(
-                        working_dir, 'temp', uploaded_img.name)
-                    # Ensure the temp directory exists
-                    with open(img_path, "wb") as f:
-                        # Save the uploaded file to a temporary location
-                        f.write(uploaded_img.getbuffer())
-
-                    predicted_class = predict_image(
-                        model, img_path, class_indices)
-                    st.success(f"Predicted Class: {predicted_class}")
-
-                    # Clean up the temporary file
-                    os.remove(img_path)
-    else:
+    if uploaded_img is None:
         st.warning("Please upload an image to classify.")
+        return
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        resized_img = image.load_img(uploaded_img, target_size=(256, 256))
+        st.image(resized_img, caption="Uploaded Image", use_column_width=True)
+
+    with col2:
+        if st.button(label="Classify"):
+            with st.spinner("Predicting..."):
+                suffix = Path(uploaded_img.name).suffix
+                with NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+                    temp_file.write(uploaded_img.getbuffer())
+                    temp_path = temp_file.name
+
+                try:
+                    predicted_class = predict_image(model, temp_path, class_indices)
+                    st.success(f"Predicted Class: {predicted_class}")
+                finally:
+                    os.remove(temp_path)
+
+
+if __name__ == "__main__":
+    main()
